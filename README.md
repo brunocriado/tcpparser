@@ -1,2 +1,2 @@
-# tcpwatch
-A watcher for tcp connection to host
+# tcpparser
+A Python /proc/net/tcp parser with something else
