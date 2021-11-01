@@ -1,0 +1,5 @@
+pytest
+pytest-cov
+pytest-mock
+freezegun
+prometheus-client==0.12.0
