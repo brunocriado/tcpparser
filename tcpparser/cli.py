@@ -1,54 +1,60 @@
-from prometheus_client import start_http_server, Counter
-import time
-from datetime import datetime
-import sys
 import collections
+from datetime import datetime
+from prometheus_client import start_http_server, Counter
+import sys
+import time
 from tcpparser.constants import PROC_NET_TCP_FILE, INTERVAL, HTTP_SERVER_PORT
 import tcpparser.utils as utils
 
-# Sane use tho
+# SHOTCUT: Have a list of address already blocked and don't show
+# that if already blocked. Ideally I was thinking to create a new
+# iptables chain and get all ips that was blocked there by tcpparser.
+# e.g:
+#iptables -N tcpParser
+#iptables -A tcpParser -j LOG --log-level 5 --log-prefix '[tcpparser]Packet dropped: '
+#iptables -A tcpParser -j DROP
+#iptables -A INPUT -s "163.172.32.1/32" -j tcpParser
+# Every time tcpparser start running, list ips there (tcpParse chain) and 
+# don't show until they are there.
+# For this case I use a global var, sane use tho
 __blocked_ips = []
 
 
-def read_file(fd: str) -> list:
+def parse_data(raw_data):
 
-    try:
-        with open(fd, 'r') as f:
-            raw_lines = f.readlines()
-    except FileNotFoundError:
-        print(f"File {fd} not found")
-        sys.exit(-1)
-    except OSError:
-        print(f"Error trying to open {fd}")
-        sys.exit(-1)
-    except Exception as e:
-        print(f"Unexpected error to open {fd}")
-        sys.exit(-1)
-
-    raw_lines = raw_lines[1:]
-    #TODO: create a lambda function to parse the file
     lines = []
-    for line in raw_lines:
+    for line in raw_data:
+        # Connection state
+        # 01 == Established
         st = line.split()[3]
         if st == "01":
-            raw_local_addr = line.split()[1]
-            raw_peer_addr = line.split()[2]
-            host_ip = utils.convert_addr(raw_peer_addr.split(':')[0])
-            # Doesn't show the ip if it's already blocked
-            if not utils.filter_loopback_address(raw_peer_addr) and host_ip not in __blocked_ips:
-                port = int(utils.convert_port(raw_local_addr.split(':')[1]))
-                ack = int(line.split()[14])
-                if port > 1024 and not ack:
-                    direction = "<-"
-                else:
-                    direction = "->"
-                conn = {
-                    "LOCAL": utils.convert_netaddr(raw_local_addr),
-                    "PEER": utils.convert_netaddr(raw_peer_addr),
-                    "DIRECTION": direction
-                }
-                lines.append(conn)
+
+            try:
+                raw_local_addr = utils.check_netaddr_pattern(line.split()[1])
+                raw_peer_addr = utils.check_netaddr_pattern(line.split()[2])
+                host_ip = utils.convert_addr(raw_peer_addr.split(':')[0])
+
+                if not utils.filter_loopback_address(raw_peer_addr) and host_ip not in __blocked_ips:
+                    port = int(utils.convert_port(raw_local_addr.split(':')[1]))
+                    ack = int(line.split()[14])
+
+                    if port > 1024 and ack == 0:
+                        direction = "<-"
+                    else:
+                        direction = "->"
+
+                    conn = {
+                        "LOCAL": utils.convert_netaddr(raw_local_addr),
+                        "PEER": utils.convert_netaddr(raw_peer_addr),
+                        "DIRECTION": direction
+                    }
+                    lines.append(conn)
+
+            except Exception as e:
+                raise e
+
     return lines
+
 
 
 def formatted_output(data: list, reason: str) -> list:
@@ -91,7 +97,7 @@ def detect_portscan(cnx: dict) -> None:
                        '172.31.59.87:25',
                        '172.31.59.87:80',
                        '172.31.59.87:93'},
-     '207.161.137.20': {'172.31.59.87:22'},
+     '20.191.237.140': {'172.31.59.87:22'},
      '185.73.124.100': {'172.31.59.87:22'}
     """
     for _, values in cnx.items():
@@ -104,6 +110,8 @@ def detect_portscan(cnx: dict) -> None:
     """
     for host_ip, sockets in peers.items():
         fail = False
+        # Check if IP wasn't already blocked and has more than 3 ports
+        # open on host running tcpparser
         if len(sockets) > 3 and host_ip not in __blocked_ips:
             __blocked_ips.append(host_ip)
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -122,6 +130,7 @@ def detect_portscan(cnx: dict) -> None:
 
 def main():
 
+    utils.got_root()
     utils.splash()
 
     """ Prometheus Exporter initialization """
@@ -132,7 +141,8 @@ def main():
     count = 0
     popfirst = False
     cnx = collections.OrderedDict()
-    data = read_file(PROC_NET_TCP_FILE)
+    raw_data = utils.read_file(PROC_NET_TCP_FILE)
+    data = parse_data(raw_data)
 
     formatted_output(data, "New connection")
     update_connections(cnx, data, popfirst)
@@ -143,7 +153,8 @@ def main():
 
     while True:
         time.sleep(INTERVAL)
-        data = read_file(PROC_NET_TCP_FILE)
+        raw_data = utils.read_file(PROC_NET_TCP_FILE)
+        data = parse_data(raw_data)
         formatted_output(data, "New connection")
         count += 1
         if count >= 6:

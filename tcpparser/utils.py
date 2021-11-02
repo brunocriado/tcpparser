@@ -1,30 +1,67 @@
+import os
+import re
 import socket
 import struct
-import time
 import subprocess
 import shutil
+import sys
+import time
 from tcpparser.constants import CLEAR_SCREEN
+from tcpparser.exceptions import InvalidV4LittleEndianIpAddress, \
+    InvalidBigEndianPortNumber, InvalidNetAddrFormat, UnknowFile
 
 
-def convert_port(port: str) -> int:
-    return int(port, 16)
+def check_netaddr_pattern(netaddr):
+    netaddrpattern = r'^[0-9a-fA-F]{8}:{1}[0-9a-fA-F]{4}$'
+    if re.match(netaddrpattern, netaddr):
+        return netaddr
+    else:
+        raise InvalidNetAddrFormat
+
+def convert_port(hexport: str) -> int:
+    portpattern = r'^[0-9a-fA-F]{4}$'
+    port = int(hexport, 16)
+    if (port <= 0 or port > 65535) or not re.match(portpattern, hexport):
+            raise InvalidBigEndianPortNumber
+    else:
+        return port
 
 def convert_addr(addr: str) -> str:
-    return socket.inet_ntoa(struct.pack("<L", int(addr, 16)))
+    addrpattern = r'^[0-9a-fA-F]{8}$'
+    invalid_addresses = ['00000000', 'FFFFFFFF']
+    if re.match(addrpattern, addr) and addr not in invalid_addresses:
+        return socket.inet_ntoa(struct.pack("<L", int(addr, 16)))
+    else:
+        raise InvalidV4LittleEndianIpAddress
 
 def convert_netaddr(netaddr: str) -> str:
-    addr, port = netaddr.split(':')
-    addr = convert_addr(addr)
-    port = convert_port(port)
-    return '{}:{}'.format(addr, port)
+    try:
+        if check_netaddr_pattern(netaddr):
+            addr, port = netaddr.split(':')
+            addr = convert_addr(addr)
+            port = convert_port(port)
+            return '{}:{}'.format(addr, port)
+    except:
+        raise InvalidNetAddrFormat
 
 
 def filter_loopback_address(netaddr: str) -> bool:
     """
-    Filter loopback addresses 
+    Filter for invalid addresses 
+    SHORTCUT: For now I'm filtering only loopback address.
+    The intention was to filter any invalid address for this purpose
+    like network and broadcast address.
     """
-    addr = netaddr.split(':')[0]
-    return addr.endswith("7F")
+    try:
+        check_netaddr_pattern(netaddr)
+        addr = netaddr.split(':')[0]
+
+        if addr.endswith("7F") and convert_addr(addr):
+            return True
+        else:
+            return False
+    except Exception as e:
+        raise e
 
 
 def splash():
@@ -50,15 +87,42 @@ def is_blocked(ip: str) -> bool:
 def block_ip(ip: str) -> None:
     """ 
     Blocks source ip 
-    e.g: iptables -I INPUT -s 12.34.56.78 -j DROP
+    e.g: iptables -I INPUT -s 12.34.56.78/32 -j DROP
     """
+    # SHORTCUT: Ideally should check if the ip is not one of the ips on any 
+    # physic or virtual network device. 
 
-    cmd = "{} {} {} {} {}".format("iptables", "-I INPUT", "-s", ip, "-j DROP")
+    cmd = "{} {} {} {}/32 {}".format("iptables", "-I INPUT", "-s", ip, "-j DROP")
     exe = cmd.split(' ')[0]
     if exe_exists(exe):
         if not is_blocked(ip):
             return _execute(cmd)
     else:
         print(f"[ERROR]: Unable to execute: {exe}")
-        print(f"**> Please check if {exe} is installed and is in the right path")
+        print(f"Please check if {exe} is installed and is in the right path")
 
+def got_root():
+    if os.geteuid() != 0:
+        print("\n[ERROR]: For this purpose, is necessary to run tcpparser as root user.\n")
+        sys.exit(-1)
+
+
+def read_file(fd: str) -> list:
+
+    try:
+        with open(fd, 'r') as f:
+            raw_data = f.readlines()
+    except FileNotFoundError:
+        print(f"\n[ERROR]: File {fd} not found")
+        sys.exit(-1)
+    except OSError:
+        print(f"\n[ERROR]: Error trying to open {fd}")
+        sys.exit(-1)
+    except:
+        print(f"\n[ERROR]: Unexpected error to open {fd}")
+        sys.exit(-1)
+
+    if not raw_data:
+        print(f"\n[ERROR]: {fd} file or its content doesn't seem to be accurate.")
+
+    return raw_data[1:]
