@@ -8,7 +8,7 @@ import sys
 import time
 from tcpparser.constants import CLEAR_SCREEN
 from tcpparser.exceptions import InvalidV4LittleEndianIpAddress, \
-    InvalidBigEndianPortNumber, InvalidNetAddrFormat, UnknowFile
+    InvalidBigEndianPortNumber, InvalidNetAddrFormat
 
 
 def check_netaddr_pattern(netaddr):
@@ -98,12 +98,12 @@ def block_ip(ip: str) -> None:
         if not is_blocked(ip):
             return _execute(cmd)
     else:
-        print(f"[ERROR]: Unable to execute: {exe}")
+        print(f"[ERROR]: Unable to execute: {exe}", file=sys.stderr)
         print(f"Please check if {exe} is installed and is in the right path")
 
 def got_root():
     if os.geteuid() != 0:
-        print("\n[ERROR]: For this purpose, is necessary to run tcpparser as root user.\n")
+        print("\n[ERROR]: For this purpose, is necessary to run tcpparser as root user.\n", file=sys.stderr)
         sys.exit(-1)
 
 
@@ -113,16 +113,16 @@ def read_file(fd: str) -> list:
         with open(fd, 'r') as f:
             raw_data = f.readlines()
     except FileNotFoundError:
-        print(f"\n[ERROR]: File {fd} not found")
+        print(f"\n[ERROR]: File {fd} not found", file=sys.stderr)
         sys.exit(-1)
     except OSError:
-        print(f"\n[ERROR]: Error trying to open {fd}")
+        print(f"\n[ERROR]: Error trying to open {fd}", file=sys.stderr)
         sys.exit(-1)
     except:
-        print(f"\n[ERROR]: Unexpected error to open {fd}")
+        print(f"\n[ERROR]: Unexpected error to open {fd}", file=sys.stderr)
         sys.exit(-1)
 
     if not raw_data:
-        print(f"\n[ERROR]: {fd} file or its content doesn't seem to be accurate.")
+        print(f"\n[ERROR]: {fd} file or its content doesn't seem to be accurate.", file=sys.stderr)
 
     return raw_data[1:]

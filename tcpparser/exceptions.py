@@ -21,9 +21,3 @@ class InvalidNetAddrFormat(TcpParserException):
     Valid netaddr format: "00000000 - FFFFFFFF" + ":" + "0000 - FFFF"
     netaddrpattern = r'[0-9a-fA-F]{8}:[0-9a-fA-F]{4}'
     """
-
-class UnknowFile(TcpParserException):
-    """ 
-    Exception for unknow file
-    If that file is empty, probably it's not reading the righ /proc/net/tcp file
-    """

@@ -1,12 +1,11 @@
 import collections
 from datetime import datetime
 from prometheus_client import start_http_server, Counter
-import sys
 import time
 from tcpparser.constants import PROC_NET_TCP_FILE, INTERVAL, HTTP_SERVER_PORT
 import tcpparser.utils as utils
 
-# SHOTCUT: Have a list of address already blocked and don't show
+# SHORTCUT: Have a list of address already blocked and don't show
 # that if already blocked. Ideally I was thinking to create a new
 # iptables chain and get all ips that was blocked there by tcpparser.
 # e.g:
@@ -61,16 +60,23 @@ def formatted_output(data: list, reason: str) -> list:
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     if len(data) > 0:
+
         for ldata in data:
             print("{:>19}: {:>18}: {:>21} {} {:<21}".format(
                 now, reason, ldata["PEER"], ldata["DIRECTION"], ldata["LOCAL"]
             ))
+
     else:
         print("No TCP peer connection established yet")
 
-def update_connections(cnx: dict, data: list, popfirst: bool) -> None:
 
+def update_connections(cnx: dict, data: list, popfirst: bool) -> None:
+    """ Update a dictionary (cnx) with the connections from the last minute """
+
+    # dict key
     epoch = int(datetime.now().timestamp() * 1000)
+
+    # FIFO
     if popfirst:
         cnx.pop(next(iter(cnx)))
     
@@ -83,8 +89,6 @@ def update_connections(cnx: dict, data: list, popfirst: bool) -> None:
 
 
 def detect_portscan(cnx: dict) -> None:
-
-    peers = collections.defaultdict(set)
 
     """
     Creates a dictionary (peers) with key based on peer address and all ports
@@ -100,14 +104,15 @@ def detect_portscan(cnx: dict) -> None:
      '20.191.237.140': {'172.31.59.87:22'},
      '185.73.124.100': {'172.31.59.87:22'}
     """
+
+    peers = collections.defaultdict(set)
+
     for _, values in cnx.items():
         for element in values:
             peers[element[0]].add(element[1])
 
-    """
-    Checks if a single peer address has more than 3 connection in the previous minute
-    and send a message
-    """
+    # Checks if a single peer address has more than 3 connection in the previous minute
+    # and shows "Port scan detected"
     for host_ip, sockets in peers.items():
         fail = False
         # Check if IP wasn't already blocked and has more than 3 ports
@@ -133,17 +138,17 @@ def main():
     utils.got_root()
     utils.splash()
 
-    """ Prometheus Exporter initialization """
+    # Prometheus Exporter initialization 
     connection_counter = Counter('new_connections', 'New Connections Counter')
     start_http_server(HTTP_SERVER_PORT)
 
-    """ Initialization of variables """
+    # Initialization of variables 
     count = 0
     popfirst = False
     cnx = collections.OrderedDict()
+
     raw_data = utils.read_file(PROC_NET_TCP_FILE)
     data = parse_data(raw_data)
-
     formatted_output(data, "New connection")
     update_connections(cnx, data, popfirst)
     detect_portscan(cnx)

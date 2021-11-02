@@ -14,6 +14,7 @@ tcpparser starting...
 2021-11-01 21:11:53:     New connection:  206.11.237.209:52239 -> 172.31.59.87:22
 2021-11-01 21:11:53:     New connection:  206.11.237.209:57588 -> 172.31.59.87:22
 2021-11-01 21:11:53:     New connection:   172.31.63.176:50368 -> 172.31.59.87:22
+2021-11-01 21:11:53:     New connection:     99.84.191.103:443 <- 172.31.59.87:37474
 ```
 At the first 10 seconds everything looks good
 ```
@@ -33,7 +34,7 @@ Something is up. `172.31.63.176` now is connected on other 2 ports (445 and 80)
 2021-11-01 21:12:13:     New connection:   172.31.63.176:51900 -> 172.31.59.87:25
 2021-11-01 21:12:13: Port scan detected:         172.31.63.176 -> 172.31.59.87 on ports 80,25,445,22
 ```
-Very suspicious eh? In the last 30 seconds `172.31.63.176` connected on 4 ports.  **tcpparser** detected the port scan and blocked that ip immediately and automatically using *iptables* as we can notice bellow:
+Very suspicious eh? In the last 30 seconds `172.31.63.176` connected on 4 ports.  **tcpparser** tread that as port scan and block that ip immediately using *iptables* as we can see bellow:
 ```
 iptables -L -n
 Chain INPUT (policy ACCEPT)

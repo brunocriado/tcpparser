@@ -1,14 +1,8 @@
 import pytest
-
 from tcpparser.utils import convert_addr, convert_port, exe_exists, \
-    filter_loopback_address
+    filter_loopback_address, read_file
 from tcpparser.exceptions import InvalidV4LittleEndianIpAddress, \
     InvalidBigEndianPortNumber
-
-__author__ = "Bruno Criado"
-__copyright__ = "Bruno Criado"
-__license__ = "MIT"
-
 
 @pytest.mark.parametrize(
     'addr, result', [
@@ -49,4 +43,9 @@ def test_exe_exists():
     assert exe_exists("iptables") is not None
     assert exe_exists("iptabless") is None
 
-def test_
+
+def test_read_empty_file(capsys):
+    PROC_NET_TCP_FILE = 'tests/empty_file.txt'
+    read_file(PROC_NET_TCP_FILE)
+    _, err = capsys.readouterr()
+    assert '[ERROR]:' in err
