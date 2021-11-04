@@ -13,36 +13,65 @@ from tcpparser.exceptions import InvalidV4LittleEndianIpAddress, \
     InvalidBigEndianPortNumber, InvalidNetAddrFormat
 
 
+# SHORTCUT: Have a list of address already blocked and don't show
+# that if already blocked. Ideally I was thinking to create a new
+# iptables chain and get all ips that was blocked there by tcpparser.
+# e.g:
+#iptables -N tcpParser
+#iptables -A tcpParser -j LOG --log-level 5 --log-prefix '[tcpparser]Packet dropped: '
+#iptables -A tcpParser -j DROP
+#iptables -A INPUT -s "163.172.32.1/32" -j tcpParser
+# Every time tcpparser start running, list ips there (tcpParse chain) and 
+# don't show until they are there.
+# For this case I use a global var, sane use tho
+__blocked_ips = []
+
+
 def check_netaddr_pattern(netaddr):
+    """ Check if network address is in the expected format """
     netaddrpattern = r'^[0-9a-fA-F]{8}:{1}[0-9a-fA-F]{4}$'
+
     if re.match(netaddrpattern, netaddr):
         return netaddr
     else:
         raise InvalidNetAddrFormat
 
+
 def convert_port(hexport: str) -> int:
+    """ Converts only hex_port part to integer """
     portpattern = r'^[0-9a-fA-F]{4}$'
     port = int(hexport, 16)
+
     if (port <= 0 or port > 65535) or not re.match(portpattern, hexport):
             raise InvalidBigEndianPortNumber
     else:
         return port
 
+
 def convert_addr(addr: str) -> str:
+    """ Converts only hex_ip part to network ip """
     addrpattern = r'^[0-9a-fA-F]{8}$'
     invalid_addresses = ['00000000', 'FFFFFFFF']
+
     if re.match(addrpattern, addr) and addr not in invalid_addresses:
         return socket.inet_ntoa(struct.pack("<L", int(addr, 16)))
     else:
         raise InvalidV4LittleEndianIpAddress
 
+
 def convert_netaddr(netaddr: str) -> str:
+    """ 
+    Converts network address from hex_ip:hex_port format to ip:port
+    e,g: 573B1FAC:BE46 to 172.31.59.87:48710 
+    """
     try:
+
         if check_netaddr_pattern(netaddr):
             addr, port = netaddr.split(':')
             addr = convert_addr(addr)
             port = convert_port(port)
             return '{}:{}'.format(addr, port)
+
     except:
         raise InvalidNetAddrFormat
 
@@ -62,6 +91,7 @@ def filter_loopback_address(netaddr: str) -> bool:
             return True
         else:
             return False
+
     except Exception as e:
         raise e
 
@@ -71,8 +101,11 @@ def splash():
     print("tcpparser starting...\n")
     time.sleep(0.3)
 
+
 def exe_exists(exe):
+    """ Returns the full path if executable exists and is the path. None otherwise """
     return shutil.which(exe)
+
 
 def _execute(cmd):
     process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -92,16 +125,19 @@ def block_ip(ip: str) -> None:
     e.g: iptables -I INPUT -s 12.34.56.78/32 -j DROP
     """
     # SHORTCUT: Ideally should check if the ip is not one of the ips on any 
-    # physic or virtual network device. 
-
+    # physic or virtual network device before blocking. 
     cmd = "{} {} {} {}/32 {}".format("iptables", "-I INPUT", "-s", ip, "-j DROP")
     exe = cmd.split(' ')[0]
+
     if exe_exists(exe):
+
         if not is_blocked(ip):
             return _execute(cmd)
+
     else:
         print(f"[ERROR]: Unable to execute: {exe}", file=sys.stderr)
         print(f"Please check if {exe} is installed and is in the right path")
+
 
 def got_root():
     if os.geteuid() != 0:
@@ -130,20 +166,6 @@ def read_file(fd: str) -> list:
     return raw_data[1:]
 
 
-# SHORTCUT: Have a list of address already blocked and don't show
-# that if already blocked. Ideally I was thinking to create a new
-# iptables chain and get all ips that was blocked there by tcpparser.
-# e.g:
-#iptables -N tcpParser
-#iptables -A tcpParser -j LOG --log-level 5 --log-prefix '[tcpparser]Packet dropped: '
-#iptables -A tcpParser -j DROP
-#iptables -A INPUT -s "163.172.32.1/32" -j tcpParser
-# Every time tcpparser start running, list ips there (tcpParse chain) and 
-# don't show until they are there.
-# For this case I use a global var, sane use tho
-__blocked_ips = []
-
-
 def parse_data(raw_data):
 
     lines = []
@@ -151,6 +173,7 @@ def parse_data(raw_data):
         # Connection state
         # 01 == Established
         st = line.split()[3]
+        
         if st == "01":
 
             try:
@@ -160,13 +183,14 @@ def parse_data(raw_data):
 
                 if not filter_loopback_address(raw_peer_addr) and host_ip not in __blocked_ips:
                     port = int(convert_port(raw_local_addr.split(':')[1]))
-                    ack = int(line.split()[14])
+                    timer_active = int(line.split()[5].split(':')[0])
 
-                    if port > 1024 and ack == 0:
+                    # If port > 1024 and timer is active (timer_active != 0) 
+                    # means that the host started a connection then the direction changes
+                    if port > 1024 and timer_active != 0:
                         direction = "<-"
                     else:
                         direction = "->"
-
                     conn = {
                         "LOCAL": convert_netaddr(raw_local_addr),
                         "PEER": convert_netaddr(raw_peer_addr),
@@ -182,6 +206,7 @@ def parse_data(raw_data):
 
 
 def formatted_output(data: list, reason: str) -> list:
+    """ Prints the output in a formated way """
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     if len(data) > 0:
@@ -201,23 +226,29 @@ def update_connections(cnx: dict, data: list, popfirst: bool) -> None:
     # dict key
     epoch = int(datetime.now().timestamp() * 1000)
 
+    # After 1 minute, start removing the first entry
+    # cnx is an ordered dictionary
     # FIFO
     if popfirst:
         cnx.pop(next(iter(cnx)))
     
+    # Uses set to avoid duplication of values
     group_conn = set()
+
     for ldata in data:
+
         if ldata["DIRECTION"] == "->":
             conn = tuple((ldata["PEER"].split(':')[0], ldata["LOCAL"]))
             group_conn.add(conn)
+
     cnx[epoch] = group_conn
 
 
-def detect_portscan(cnx: dict) -> None:
-
+def _organize_peer_connections(cnx: dict) -> dict:
     """
-    Creates a dictionary (peers) with key based on peer address and all ports
-    that it connected previous minute
+    This function structures/organizes the peer connections by ip peer as key of dict
+    and all ports that have established connection as values (single values) in the 
+    last check.
     e.g:
     {'172.31.63.176': {'172.31.59.87:22'},
      '172.31.52.219': {'172.31.59.87:13',
@@ -233,13 +264,24 @@ def detect_portscan(cnx: dict) -> None:
     peers = collections.defaultdict(set)
 
     for _, values in cnx.items():
+
         for element in values:
             peers[element[0]].add(element[1])
+
+    return peers
+
+
+def check_portscan(cnx: dict) -> None:
+    """ Checks established connections from a source ip """
+
+    peers = _organize_peer_connections(cnx)
+
 
     # Checks if a single peer address has more than 3 connection in the previous minute
     # and shows "Port scan detected"
     for host_ip, sockets in peers.items():
         fail = False
+
         # Check if IP wasn't already blocked and has more than 3 ports
         # open on host running tcpparser
         if len(sockets) > 3 and host_ip not in __blocked_ips:
@@ -247,11 +289,15 @@ def detect_portscan(cnx: dict) -> None:
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             ports = []
             reason = "Port scan detected"
+
             for netaddr in sockets:
                 ports.append(str(netaddr.split(':')[1]))
+
             local = str(netaddr.split(':')[0])
             print("{:>19}: {:>18}: {:>21} {} {:<21}".format(
                 now, reason, host_ip, "->", local + " on ports " + ",".join(ports)
             ))
+
+            # Blocks the source ip only once
             if not fail:
                 fail = block_ip(host_ip)

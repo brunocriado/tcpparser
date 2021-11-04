@@ -92,20 +92,30 @@ Yeah, we have **tcpparser** available on pip as well.
 Friendly reminder, to avoid any problem, install and execute **tcpparser** as *root* user
 To install:
 ```
-# python3 -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ tcpparser
+sudo python3 -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ tcpparser
 ```
 To run:
 ```
-# tcpparser
+sudo tcpparser
 ```
 **NOTE:** This current version of tcpparser was tested only on Python 3.8.10
 
-# Contribution
-Have any idea to improve that automation? Want to improve the test coverage? Fill free to clone that project, create a local feature branch make your changes and open a pull request. 
-You will probably need to install `tox` and `pytest` to build and run these tests.
+# Running without installation of the package
+If you want to run it without install the package, just clone this repository and the dependencies:
 ```
-pip install tox pytest
+git clone https://github.com/brunocriado/tcpparser.git
+cd tcpparser
+pip install -r requirements.txt
 ```
-Once install, `tox` to run the tests in an automated way
-
-To test your code changes easily, use the `tcpparser-runner.py` script to run without building the package 
+And then you can run it:
+```
+sudo python3 tcpparser-runner.py
+```
+If you intend to run the tests:
+```
+tox
+```
+To build a package:
+```
+tox -e build
+```
