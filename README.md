@@ -18,7 +18,7 @@ tcpparser starting...
 ```
 At the first 10 seconds everything looks good
 ```
-2021-11-01 21:12:03:     New connection:   172.31.63.176:53804 -> 172.31.59.87:445 
+2021-11-01 21:12:03:     New connection:   172.31.63.176:53804 -> 172.31.59.87:445
 2021-11-01 21:12:03:     New connection:  206.11.237.209:52239 -> 172.31.59.87:22
 2021-11-01 21:12:03:     New connection:   172.31.63.176:55656 -> 172.31.59.87:80
 2021-11-01 21:12:03:     New connection:  206.11.237.209:57588 -> 172.31.59.87:22
@@ -62,7 +62,7 @@ Sure it has features:
  - No action required. **tcpparser** detects the thread and blocks it automatically
  - Connection count metrics are exposed on http://localhost:3021/. Configure you prometheus to scrape the metrics from that endpoint
  - Easy installation using `pip`
- - Don't wanna to install in your machine. Don't worry, **tcpparser** is containerized using Docker 
+ - Don't wanna to install in your machine. Don't worry, **tcpparser** is containerized using Docker
 
 # Installation
 
@@ -88,7 +88,7 @@ docker run --net=host --cap-add=NET_ADMIN --cap-add=NET_RAW -ti tcpparser
 
 ## Using pip
 
-Yeah, we have **tcpparser** available on pip as well. 
+Yeah, we have **tcpparser** available on pip as well.
 Friendly reminder, to avoid any problem, install and execute **tcpparser** as *root* user
 To install:
 ```
